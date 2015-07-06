@@ -103,3 +103,40 @@ void BruteforceCollisionDetector::find_collisions(vector<CalcNode> &virt_nodes)
     LOG_DEBUG("Local/local collisions processed");
 
 }
+
+void BruteforceCollisionDetector::find_collision(CalcNode& cur_node, CalcNode& new_node, int dir)
+{
+    Engine& e = Engine::getInstance();
+    Mesh* mesh;
+    float direction[3] = {0, 0, 0};
+    direction[abs(dir)-1] = dir/abs(dir);
+    //LOG_INFO("Dir calc: "<<direction[0] <<" "<<direction[1]<<" "<<direction[2]<<" "<<get_threshold());
+    for (int i = 0; i < e.getNumberOfBodies(); i++)
+    {
+	//LOG_INFO("Body "<<i<<" in progress");
+	mesh = e.getBody(i)->getMeshes();
+	//LOG_INFO("Mesh obtained");
+	if (!mesh)
+	{
+	    LOG_INFO("Oh wait, mesh not obtained");
+	    continue;
+	}
+	continue;
+        if( mesh->interpolateBorderNode(
+        	cur_node.coords[0], cur_node.coords[1], cur_node.coords[2],
+                direction[0] * get_threshold(), direction[1] * get_threshold(), direction[2] * get_threshold(), new_node) )
+        {
+            new_node.setIsBorder(true);
+            new_node.setInContact(true);
+            cur_node.contactNodeNum = new_node.contactNodeNum; //!!!!!Tetr number is transmitted in here
+	    cur_node.contactDirection = i; //!!!!!Mesh (body) number is transmitted in here 
+            cur_node.setInContact(true);
+	    new_node.number = 1;
+	    LOG_INFO("Found virtual node for a node");
+	    return;
+        }
+	//LOG_INFO("Zero fucks found");
+    }
+    //LOG_INFO("No virtual node for a node");
+    new_node.number = 0;
+}

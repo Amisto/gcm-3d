@@ -28,6 +28,7 @@ namespace gcm {
         void set_threshold(float value);
         float get_threshold();
         virtual void find_collisions(std::vector<CalcNode> &virt_nodes) = 0;
+        virtual void find_collision(CalcNode& cur_node, CalcNode& new_node, int dir) = 0;
         bool find_intersection(AABB &outline1, AABB &outline2, AABB &intersection);
         // return elements that are in intersection
         void find_nodes_in_intersection(Mesh* mesh, AABB &intersection, std::vector<CalcNode> &result);

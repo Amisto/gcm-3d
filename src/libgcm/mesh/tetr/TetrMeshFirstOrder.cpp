@@ -2607,6 +2607,24 @@ bool TetrMeshFirstOrder::interpolateBorderNode(real x, real y, real z,
             //tmpRes = true;
             //break;
             //node = tmpNode;
+
+	    int ntetr = 0;
+	    TetrFirstOrder& tetr = getTetr(0);
+	    for (int j=0; j<getTetrsNumber(); j++)
+	    {
+		int ok = 0;
+		tetr = getTetr(j);
+		for (int k=0; k<4; k++)
+		    if (face.verts[0] == tetr.verts[k] || face.verts[1] == tetr.verts[k] || face.verts[2] == tetr.verts[k])
+		 	ok ++;
+		if (ok >= 3)
+		{    
+		    ntetr = j;
+		    break;
+		}
+	    }	
+	    node.contactNodeNum = ntetr;
+
             node.number = -1;
             return true;
         }

@@ -275,7 +275,9 @@ namespace gcm
 				float scaleX, float scaleY, float scaleZ);
 
         DataBus* getDataBus();
-        CalcNode& getVirtNode(unsigned int i);
+        CalcNode& getVirtNode(unsigned int i);        
+	void getVirtNode(CalcNode& cur_node, CalcNode& new_node, int dir, Mesh* mesh);
+
 
         void setContactThresholdType(unsigned char type);
         unsigned char getContactThresholdType();

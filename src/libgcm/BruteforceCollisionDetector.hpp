@@ -14,6 +14,7 @@ namespace gcm {
         ~BruteforceCollisionDetector();
         std::string getType () const;
         void find_collisions(std::vector<CalcNode> &virt_nodes);
+	void find_collision(CalcNode& cur_node, CalcNode& new_node, int dir);
     };
 
 }

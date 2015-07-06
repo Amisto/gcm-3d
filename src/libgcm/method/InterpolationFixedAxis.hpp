@@ -42,6 +42,11 @@ namespace gcm
         void __doNextPartStep(CalcNode& cur_node, CalcNode& new_node, float time_step, int stage, Mesh* mesh);
 
         USE_LOGGER;
+    private:
+	void quasi_zerofy();
+	void quasi_border(CalcNode& cur_node, CalcNode& new_node, CalcNode& virt_node, Mesh* vm, int dir, std::vector<CalcNode>& previous_nodes, bool* inner, float time_step);
+	void quasi_contact(CalcNode& cur_node, CalcNode& new_node, CalcNode& virt_node, CalcNode& virt_node_inner, Mesh* vmi, std::vector<CalcNode>& previous_nodes, bool* inner, std::vector<CalcNode>& virt_previous_nodes, bool* virt_inner, float time_step, int dir);
+	void quasi_volume(CalcNode& cur_node, CalcNode& new_node, CalcNode& virt_node_left, CalcNode& virt_node_right, Mesh* vml, Mesh* vmr, std::vector<CalcNode>& previous_nodes, bool* inner, float time_step);
     };
 }
 
