@@ -2603,6 +2603,7 @@ bool TetrMeshFirstOrder::interpolateBorderNode(real x, real y, real z,
                                 n1.values, n2.values, n3.values, node.values, 9);
             node.setRho((getNode(face.verts[0])).getRho());
             node.setMaterialId((getNode(face.verts[0])).getMaterialId());
+	    node.setRheologyMatrix((getNode(face.verts[0])).getRheologyMatrix());
 
             //tmpRes = true;
             //break;

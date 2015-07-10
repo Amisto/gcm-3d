@@ -680,6 +680,22 @@ inline void interpolateBox(gcm::real x0, gcm::real y0, gcm::real z0, gcm::real x
     auto zd = (z-z0)/(z1-z0);
     auto _zd = 1-zd;
 
+    //limiter ----------------------------------------------------------------------------
+    gcm::real *max = (gcm::real*)malloc(sizeof(gcm::real)*n);
+    for (uint i = 0; i < n; i++)
+    {
+	max[i] = fabs(q000[i]);
+	if (fabs(q001[i]) > max[i]) max[i] = fabs(q001[i]);   
+        if (fabs(q010[i]) > max[i]) max[i] = fabs(q010[i]); 
+        if (fabs(q011[i]) > max[i]) max[i] = fabs(q011[i]); 
+        if (fabs(q100[i]) > max[i]) max[i] = fabs(q100[i]); 
+        if (fabs(q101[i]) > max[i]) max[i] = fabs(q101[i]); 
+        if (fabs(q110[i]) > max[i]) max[i] = fabs(q110[i]); 
+        if (fabs(q111[i]) > max[i]) max[i] = fabs(q111[i]); 
+    }
+    //------------------------------------------------------------------------------------
+
+
     for (uint i = 0; i < n; i++)
     {
         auto c00 = q000[i]*_xd + q100[i]*xd;
@@ -691,7 +707,11 @@ inline void interpolateBox(gcm::real x0, gcm::real y0, gcm::real z0, gcm::real x
         auto c1 = c01*_yd+c11*yd;
 
         out[i] = c0*_zd+c1*zd;
+    //limiter ----------------------------------------------------------------------------
+	if (fabs(out[i]) > max[i]) out[i] = max[i]*out[i]/fabs(out[i]); 
+    //------------------------------------------------------------------------------------
     }
+    free(max);	   
 }
 
 #endif    /* GCM_MATH_H */

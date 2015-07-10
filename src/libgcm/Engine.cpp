@@ -409,7 +409,7 @@ CalcNode& Engine::getVirtNode(unsigned int i)
 void Engine::getVirtNode(CalcNode& cur_node, CalcNode& new_node, int dir, Mesh* mesh)
 {
     colDet->find_collision(cur_node, new_node, dir);	    
-    if (new_node.number) mesh = getBody(new_node.contactDirection)->getMeshes();
+    //if (new_node.number) mesh = getBody(new_node.contactDirection)->getMeshes();
 }
 
 void Engine::doNextStep()

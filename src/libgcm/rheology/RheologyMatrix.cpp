@@ -132,8 +132,9 @@ void RheologyMatrix::decomposeZ(const ICalcNode& node)
 void RheologyMatrix::decompose(const ICalcNode& node, unsigned int direction)
 {
     assert_le(direction, 2);
-
+    //LOG_INFO("RM 00");
     auto s = setter->getStateForNode(node);
+    //LOG_INFO("RM 01");
     if (!matrices[direction].cached[s] || !immutable)
     {
         switch(direction)

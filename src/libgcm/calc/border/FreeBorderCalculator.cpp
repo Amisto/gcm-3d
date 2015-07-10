@@ -95,5 +95,20 @@ void FreeBorderCalculator::doCalc(CalcNode& cur_node, CalcNode& new_node, Rheolo
 
     for(int j = 0; j < 9; j++)
         new_node.values[j] = new_node.values[j] + (gsl_vector_get(x_gsl, j) - cur_node.values[j] );
+//WARNING Toxic hack ahead ----------------------------------------------------------------------------
+    int nmax = 0, nmin = 0;
+    gcm::real max = matrix->getL(0, 0), min = matrix->getL(0, 0);
+    for(int i = 1; i < 9; i++)
+    {
+        if (matrix->getL(i, i) > max) {max = matrix->getL(i, i); nmax = i;};
+        if (matrix->getL(i, i) < min) {min = matrix->getL(i, i); nmin = i;};
+    }
+    if (!inner[nmax]) nmax = nmin;
+    if (previousNodes[nmax].getMaterialId() != cur_node.getMaterialId())
+    {
+        for(int i = 0; i < 9; i++)
+            new_node.values[i] = (cur_node.values[i] + previousNodes[nmax].values[i])/2;
+    }
 
+//-----------------------------------------------------------------------------------------------------
 };

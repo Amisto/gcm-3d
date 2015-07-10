@@ -691,6 +691,8 @@ bool TetrMeshSecondOrder::interpolateNode(CalcNode& origin, float dx, float dy, 
                               getNode(tmp_tetr.addVerts[0]), getNode(tmp_tetr.addVerts[1]),
                               getNode(tmp_tetr.addVerts[2]), getNode(tmp_tetr.addVerts[3]),
                               getNode(tmp_tetr.addVerts[4]), getNode(tmp_tetr.addVerts[5]));
+    targetNode.setRho(getNode(tmp_tetr.verts[0]).getRho());
+    targetNode.setMaterialId(getNode(tmp_tetr.verts[0]).getMaterialId());
     return true;
 }
 

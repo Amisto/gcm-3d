@@ -36,10 +36,14 @@ void InterpolationFixedAxis::quasi_zerofy()
 
 void InterpolationFixedAxis::quasi_border(CalcNode& cur_node, CalcNode& new_node, CalcNode& virt_node, Mesh* vm, int dir, vector<CalcNode>& previous_nodes, bool* inner, float time_step)
 {
+    //LOG_INFO("QB 00");
     Engine &e = Engine::getInstance();
     RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
+    //LOG_INFO("QB 01");
     gcm::real distq = (cur_node.coords[0] - virt_node.coords[0])*(cur_node.coords[0] - virt_node.coords[0]) + (cur_node.coords[1] - virt_node.coords[1])*(cur_node.coords[1] - virt_node.coords[1]) + (cur_node.coords[2] - virt_node.coords[2])*(cur_node.coords[2] - virt_node.coords[2]);
     for (int i=0; i<9; i++)
+    {
+	//LOG_INFO("QB 02 "<<i);
 	if (!inner[i] && curM->getL(i, i)*dir > EQUALITY_TOLERANCE)
 	{
 	    gcm::real lam_tau = curM->getL(i, i)*time_step;
@@ -54,10 +58,13 @@ void InterpolationFixedAxis::quasi_border(CalcNode& cur_node, CalcNode& new_node
 		previous_nodes[i].values[j] = virt_node.values[j];
 	    inner[i] = true;
 	}
+    }
+    //LOG_INFO("QB 03");	
     float outer_normal[3];
     outer_normal[abs(dir)-1] = dir/abs(dir);
     e.getBorderCondition(cur_node.getBorderConditionId())->doCalc(e.getCurrentTime(), cur_node,
                                                                 new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal);
+    //LOG_INFO("QB 04");
 }
 
 void InterpolationFixedAxis::quasi_contact(CalcNode& cur_node, CalcNode& new_node, CalcNode& virt_node, CalcNode& virt_node_inner, Mesh* vmi, vector<CalcNode>& previous_nodes, bool* inner, vector<CalcNode>& virt_previous_nodes, bool* virt_inner, float time_step, int dir)
@@ -80,8 +87,11 @@ void InterpolationFixedAxis::quasi_contact(CalcNode& cur_node, CalcNode& new_nod
                 previous_nodes[i].values[j] = virt_node_inner.values[j];
             inner[i] = true;
 	}
-    float outer_normal[3];
+    float outer_normal[3] = {0};
     outer_normal[abs(dir)-1] = dir/abs(dir);
+    LOG_INFO("QC \n cur \n"<<cur_node.getRheologyMatrix()->getU());
+    LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
+    LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
     e.getContactCondition(cur_node.getContactConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
                                                        new_node, virt_node, cur_node.getRheologyMatrix(), previous_nodes, inner,
                                                        virt_node.getRheologyMatrix(), virt_previous_nodes, virt_inner, outer_normal);
@@ -212,6 +222,7 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
         }
 	//LOG_INFO("01");
         RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
+	LOG_INFO("outers: "<<outer_count);
         if (outer_count == 1)
         {   
             float valL = 0;
@@ -228,14 +239,17 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
 	if (outer_count == 2 || outer_count == 4 || outer_count == 6) //double contact, we have another bodies on both sides
 	{
 	    //firstly, get virtual nodes and check materials 
-            CalcNode virt_node_left, virt_node_right;
-	    Mesh *ml, *mr;
+	    CalcNode v_n_l, v_n_r;
+            CalcNode &virt_node_left = v_n_l, &virt_node_right = v_n_r;
+	    Mesh *ml = NULL, *mr = NULL;
+	    virt_node_left.number = 0;
+	    virt_node_right.number = 0;
 	    //RheologyMatrixPtr lM, rM;
-	    //LOG_INFO("L");
+//	    LOG_INFO("L");
 	    engine.getVirtNode(cur_node, virt_node_left, -stage-1, ml);
-	    //LOG_INFO("R");
+//	    LOG_INFO("R");
             engine.getVirtNode(cur_node, virt_node_right, stage+1, mr);
-	    //LOG_INFO("D");
+//	    LOG_INFO("D");
             if (virt_node_left.number) virt_node_left.setInContact(true);
 	    if (virt_node_right.number) virt_node_right.setInContact(true);
             float virt_left_dksi[9], virt_right_dksi[9];
@@ -243,23 +257,41 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
             vector<CalcNode> virt_left_previous_nodes, virt_right_previous_nodes;
             virt_left_previous_nodes.resize(9);
             virt_right_previous_nodes.resize(9);
-            float virt_left_outer_normal[3], virt_right_outer_normal[3];
+            float virt_left_outer_normal[3] = {0}, virt_right_outer_normal[3] = {0};
+	    virt_left_outer_normal[stage] = 1;
+	    virt_right_outer_normal[stage] = -1;
             int virt_left_outer_count;
-	    if (virt_node_left.number) virt_left_outer_count = prepare_node(virt_node_left, virt_node_left.getRheologyMatrix(),
+	    RheologyMatrixPtr vlM, vrM;
+	    if (virt_node_left.number) 
+	    {
+		ml = engine.getBody(virt_node_left.contactDirection)->getMeshes();
+		vlM = virt_node_left.getRheologyMatrix();
+		virt_node_left.setIsBorder(false);
+		virt_left_outer_count = prepare_node(virt_node_left, vlM,
                                                     time_step, stage, ml,
                                                     virt_left_dksi, virt_left_inner, virt_left_previous_nodes,
                                                     virt_left_outer_normal);
+		virt_node_left.setIsBorder(true);
+	    }
             int virt_right_outer_count;
-	    if (virt_node_right.number) virt_right_outer_count = prepare_node(virt_node_right, virt_node_right.getRheologyMatrix(),
+	    if (virt_node_right.number) 
+	    {
+		mr = engine.getBody(virt_node_right.contactDirection)->getMeshes();
+		vrM = virt_node_right.getRheologyMatrix();
+		virt_node_right.setIsBorder(false);
+		virt_right_outer_count = prepare_node(virt_node_right, vrM,
                                                     time_step, stage, mr,
                                                     virt_right_dksi, virt_right_inner, virt_right_previous_nodes,
                                                     virt_right_outer_normal);
+		virt_node_right.setIsBorder(true);
+	    }
+	    //LOG_INFO("Prepared");
 	    //Check Direction for virt nodes
-	    RheologyMatrixPtr vlM, vrM;
+//	    LOG_INFO("P");
 	    float valL = 0;
 	    if (virt_node_left.number)
 	    {
-		vlM = virt_node_left.getRheologyMatrix();
+		//vlM = virt_node_left.getRheologyMatrix();
             	virt_left_outer_count = 0;
             	for (uint i=0; i<9; i++)
             	{
@@ -271,7 +303,7 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
 	    }
 	    if (virt_node_right.number)
 	    {
-            	vrM = virt_node_right.getRheologyMatrix();
+            	//vrM = virt_node_right.getRheologyMatrix();
             	virt_right_outer_count = 0;
             	for (uint i=0; i<9; i++)
             	{
@@ -347,6 +379,7 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
                 {  
                     //val = 1;
                     //outer_normal[stage] = 1;	
+		    //LOG_INFO("LR 0");
                     quasi_contact(cur_node, new_node, virt_node_right, virt_node_left, ml, previous_nodes, inner, virt_right_previous_nodes, virt_right_inner, time_step, stage + 1); 
                     return;
                 }
@@ -376,6 +409,7 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
                 {  
                     //val = -1;
                     //outer_normal[stage] = -1;
+		    //LOG_INFO("LR 1");
                     quasi_contact(cur_node, new_node, virt_node_left, virt_node_right, mr, previous_nodes, inner, virt_left_previous_nodes, virt_left_inner, time_step, -stage-1); 
                     return;
                 }
@@ -406,49 +440,73 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
 	if (outer_count == 3)
 	{
 	    //LOG_INFO("07");
-	    CalcNode virt_node;
-            Mesh *m;
+	    CalcNode v_n;
+	    CalcNode &virt_node = v_n;
+	    virt_node.number = 0;
+            Mesh *m = NULL;
             //RheologyMatrixPtr lM, rM;
-	    //LOG_INFO("S");
+//	    LOG_INFO("S");
             engine.getVirtNode(cur_node, virt_node, val*(stage+1), m); 
-	    //LOG_INFO("D");
+	    //LOG_INFO("Got virt node "<<virt_node.number <<" body "<<(int)virt_node.contactDirection <<" mID " <<(int)virt_node.getMaterialId());
+	    if (virt_node.number) 
+	    {
+		m = engine.getBody(virt_node.contactDirection)->getMeshes();
+	    	if (!m) LOG_INFO("No mesh for virt node");
+	    }
+//	    LOG_INFO("D");
             if (virt_node.number) virt_node.setInContact(true);
             float virt_dksi[9];
             bool virt_inner[9];
             vector<CalcNode> virt_previous_nodes;
             virt_previous_nodes.resize(9);
-            float virt_outer_normal[3];
+            float virt_outer_normal[3] = {-outer_normal[0], -outer_normal[1], -outer_normal[2]};
             int virt_outer_count;
             if (virt_node.number)
 	    { 
-	  	//LOG_INFO("08");
-		virt_outer_count = prepare_node(virt_node, virt_node.getRheologyMatrix(),
+//	  	LOG_INFO("08 " <<(int)virt_node.getMaterialId());
+		//cur_node.setIsBorder(false);
+		RheologyMatrixPtr vrm = virt_node.getRheologyMatrix();
+		//vrm->decomposeX(virt_node);
+		virt_node.setIsBorder(false);
+		virt_outer_count = prepare_node(virt_node, vrm,
                                                     time_step, stage, m,
                                                     virt_dksi, virt_inner, virt_previous_nodes,
                                                     virt_outer_normal);
+		virt_node.setIsBorder(true);
+//		LOG_INFO("08 between");
             	RheologyMatrixPtr virtM = virt_node.getRheologyMatrix();
             	float valL = 0;
 		virt_outer_count = 0;
+//	 	LOG_INFO("080");
             	for (uint i=0; i<9; i++)
             	{
+//		    LOG_INFO("081 " <<i);
                     valL = (virtM->getL(i, i) > 0 ? -1.0 : (fabs(virtM->getL(i, i)) < EQUALITY_TOLERANCE ? 0 : 1.0));
                     if (valL == 0) continue;
                     if (val != valL) virt_inner[i] = false;
 		    if (!virt_inner[i]) virt_outer_count++;
             	}
+//	 	LOG_INFO("082 " <<virt_outer_count);
 		if (virt_outer_count < 3) LOG_INFO("OBVIOUSLY, we fucked up smt 1 " <<virt_outer_count);
 		if (virt_outer_count > 3) //quasi_border(); //FIXME - cut an unlikely branch of algorhythm
 		    quasi_border(cur_node, new_node, virt_node, m, (stage+1)*val, previous_nodes, inner, time_step);
-		//LOG_INFO("09");
+		LOG_INFO("09");
+    		LOG_INFO("cur \n"<<cur_node.getRheologyMatrix()->getU());
+    		LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
+    		LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
+
 		if (virt_outer_count == 3) engine.getContactCondition(cur_node.getContactConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
                                                        new_node, virt_node, cur_node.getRheologyMatrix(), previous_nodes, inner,
                                                        virt_node.getRheologyMatrix(), virt_previous_nodes, virt_inner, outer_normal);  
 	 	//LOG_INFO("10");
-		return;	
+		return;
 	    }
-	    //LOG_INFO("11");
-	    engine.getBorderCondition(cur_node.getBorderConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
+	    //LOG_INFO("11 " <<(int)cur_node.getBorderConditionId());
+	    if (cur_node.getBorderConditionId())
+	    	engine.getBorderCondition(cur_node.getBorderConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
                                                                  new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal);
+	    else
+	    	engine.getBorderCalculator("FreeBorderCalculator")->doCalc(cur_node, new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal, 1.0);
 	    //LOG_INFO("12");
 	    return;
 	}
@@ -656,28 +714,36 @@ int InterpolationFixedAxis::prepare_node(CalcNode& cur_node, RheologyMatrixPtr r
 {
     assert_ge(stage, 0);
     assert_le(stage, 2);
-
+//    LOG_INFO("PN 00");
     if (cur_node.isBorder())
         mesh->findBorderNodeNormal(cur_node, &outer_normal[0], &outer_normal[1], &outer_normal[2], false);
-
+//    LOG_INFO("PN 01");
     LOG_TRACE("Preparing elastic matrix");
     //  Prepare matrixes  A, Lambda, Omega, Omega^(-1)
-
+//    LOG_INFO("Elastic matrix:\n" << rheologyMatrix);
+//    LOG_INFO("Elastic matrix eigen values: before \n" << rheologyMatrix->getL());
     switch (stage) {
-    case 0: rheologyMatrix->decomposeX(cur_node);
+    case 0: 
+	//LOG_INFO("PN 01 0 " <<stage);
+	rheologyMatrix->decomposeX(cur_node);
         break;
-    case 1: rheologyMatrix->decomposeY(cur_node);
+    case 1: 
+	//LOG_INFO("PN 01 1 " <<stage);
+	rheologyMatrix->decomposeY(cur_node);
         break;
-    case 2: rheologyMatrix->decomposeZ(cur_node);
+    case 2: 
+	//LOG_INFO("PN 01 2 " <<stage);
+	rheologyMatrix->decomposeZ(cur_node);
         break;
     }
-    LOG_TRACE("Preparing elastic matrix done");
+//    LOG_INFO("PN 02");
+//    LOG_INFO("Preparing elastic matrix done");
 
-    LOG_TRACE("Elastic matrix eigen values:\n" << rheologyMatrix->getL());
+//    LOG_INFO("Elastic matrix eigen values: after \n" << rheologyMatrix->getL());
 
     for (int i = 0; i < 9; i++)
         dksi[i] = -rheologyMatrix->getL(i, i) * time_step;
-
+//    LOG_INFO("PN 03");
     return find_nodes_on_previous_time_layer(cur_node, stage, mesh, dksi, inner, previous_nodes, outer_normal, debug);
 }
 
