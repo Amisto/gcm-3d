@@ -91,6 +91,11 @@ void FreeBorderCalculator::doCalc(CalcNode& cur_node, CalcNode& new_node, Rheolo
 
     // Solve linear equations using GSL tools
     gsl_linalg_LU_decomp (U_gsl, p_gsl, &s);
+    if (fabs(gsl_linalg_LU_det(U_gsl, s)) < EQUALITY_TOLERANCE)
+    {
+	cur_node.contactDirection = 0;
+	return;
+    }
     gsl_linalg_LU_solve (U_gsl, p_gsl, om_gsl, x_gsl);
 
     for(int j = 0; j < 9; j++)

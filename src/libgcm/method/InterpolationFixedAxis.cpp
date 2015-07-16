@@ -41,6 +41,8 @@ void InterpolationFixedAxis::quasi_border(CalcNode& cur_node, CalcNode& new_node
     RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
     //LOG_INFO("QB 01");
     gcm::real distq = (cur_node.coords[0] - virt_node.coords[0])*(cur_node.coords[0] - virt_node.coords[0]) + (cur_node.coords[1] - virt_node.coords[1])*(cur_node.coords[1] - virt_node.coords[1]) + (cur_node.coords[2] - virt_node.coords[2])*(cur_node.coords[2] - virt_node.coords[2]);
+    curM->decompose(cur_node, abs(dir)-1);
+    int n_outer = 0;
     for (int i=0; i<9; i++)
     {
 	//LOG_INFO("QB 02 "<<i);
@@ -58,12 +60,21 @@ void InterpolationFixedAxis::quasi_border(CalcNode& cur_node, CalcNode& new_node
 		previous_nodes[i].values[j] = virt_node.values[j];
 	    inner[i] = true;
 	}
+	if (curM->getL(i, i)*dir < -EQUALITY_TOLERANCE)
+	    inner[i] = false;
+	if (!inner[i]) n_outer++;
     }
-    //LOG_INFO("QB 03");	
-    float outer_normal[3];
+    if (n_outer != 3) LOG_INFO("QB 03 " <<n_outer);	
+    float outer_normal[3] = {0};
     outer_normal[abs(dir)-1] = dir/abs(dir);
+    cur_node.contactDirection = 1;
     e.getBorderCondition(cur_node.getBorderConditionId())->doCalc(e.getCurrentTime(), cur_node,
                                                                 new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal);
+    if (!cur_node.contactDirection)
+    {
+	LOG_INFO("QB \n cur \n"<<cur_node.getRheologyMatrix()->getU());
+	LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
+    }
     //LOG_INFO("QB 04");
 }
 
@@ -72,7 +83,9 @@ void InterpolationFixedAxis::quasi_contact(CalcNode& cur_node, CalcNode& new_nod
     Engine &e = Engine::getInstance();
     RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
     gcm::real distq = (cur_node.coords[0] - virt_node_inner.coords[0])*(cur_node.coords[0] - virt_node_inner.coords[0]) + (cur_node.coords[1] - virt_node_inner.coords[1])*(cur_node.coords[1] - virt_node_inner.coords[1]) + (cur_node.coords[2] - virt_node_inner.coords[2])*(cur_node.coords[2] - virt_node_inner.coords[2]);
+    int n_outer = 0;
     for (int i=0; i<9; i++)
+    {
 	if (!inner[i] && curM->getL(i, i)*dir > EQUALITY_TOLERANCE)
 	{
 	    gcm::real lam_tau = curM->getL(i, i)*time_step;
@@ -87,11 +100,16 @@ void InterpolationFixedAxis::quasi_contact(CalcNode& cur_node, CalcNode& new_nod
                 previous_nodes[i].values[j] = virt_node_inner.values[j];
             inner[i] = true;
 	}
+	if (curM->getL(i, i)*dir < -EQUALITY_TOLERANCE)
+            inner[i] = false;
+        if (!inner[i]) n_outer++;
+    }
+    if (n_outer != 3) LOG_INFO("QC " <<n_outer);
     float outer_normal[3] = {0};
     outer_normal[abs(dir)-1] = dir/abs(dir);
-    LOG_INFO("QC \n cur \n"<<cur_node.getRheologyMatrix()->getU());
-    LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
-    LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
+    //LOG_INFO("QC \n cur \n"<<cur_node.getRheologyMatrix()->getU());
+    //LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
+    //LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
     e.getContactCondition(cur_node.getContactConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
                                                        new_node, virt_node, cur_node.getRheologyMatrix(), previous_nodes, inner,
                                                        virt_node.getRheologyMatrix(), virt_previous_nodes, virt_inner, outer_normal);
@@ -201,6 +219,7 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
     if (cur_node.isBorder())
     {
         LOG_TRACE("Start border node calc");
+	//LOG_INFO("outers: "<<outer_count);
         // FIXME_ASAP - do smth with this!
         // It is not stable now. See ugly hack below.
         // Think about: (a) cube, (b) rotated cube, (c) sphere.
@@ -222,8 +241,8 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
         }
 	//LOG_INFO("01");
         RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
-	LOG_INFO("outers: "<<outer_count);
-        if (outer_count == 1)
+	//LOG_INFO("outers: "<<outer_count);
+        //if (outer_count == 1)
         {   
             float valL = 0;
 	    outer_count = 0;
@@ -235,8 +254,14 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
 		if (!inner[i]) outer_count++;
             }
         }
+	if (outer_count > 3)
+        {
+            quasi_zerofy();
+            return;
+        }
+	if (outer_count != 3) LOG_INFO("outers: "<<outer_count);
 	//LOG_INFO("02");
-	if (outer_count == 2 || outer_count == 4 || outer_count == 6) //double contact, we have another bodies on both sides
+/*	if (outer_count == 2 || outer_count == 4 || outer_count == 6) //double contact, we have another bodies on both sides
 	{
 	    //firstly, get virtual nodes and check materials 
 	    CalcNode v_n_l, v_n_r;
@@ -435,7 +460,7 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
             }
 	    LOG_INFO("OBVIOUSLY, we forgot something 0 " <<outer_count);
 	    return;
-	}
+	} */
 	//LOG_INFO("06");
 	if (outer_count == 3)
 	{
@@ -490,14 +515,24 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
 		if (virt_outer_count < 3) LOG_INFO("OBVIOUSLY, we fucked up smt 1 " <<virt_outer_count);
 		if (virt_outer_count > 3) //quasi_border(); //FIXME - cut an unlikely branch of algorhythm
 		    quasi_border(cur_node, new_node, virt_node, m, (stage+1)*val, previous_nodes, inner, time_step);
-		LOG_INFO("09");
-    		LOG_INFO("cur \n"<<cur_node.getRheologyMatrix()->getU());
-    		LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
-    		LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
-
+		//LOG_INFO("09");
+    		//LOG_INFO("cur \n"<<cur_node.getRheologyMatrix()->getU());
+    		//LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
+    		//LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
+		//cur_node.getRheologyMatrix()->decompose(cur_node, stage);
+		//virt_node.getRheologyMatrix()->decompose(virt_node, stage);
+		//LOG_INFO("TC "<<outer_normal[0] <<" "<<outer_normal[1] <<" "<<outer_normal[2] <<" ");
+		virt_node.number = 1;
 		if (virt_outer_count == 3) engine.getContactCondition(cur_node.getContactConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
                                                        new_node, virt_node, cur_node.getRheologyMatrix(), previous_nodes, inner,
                                                        virt_node.getRheologyMatrix(), virt_previous_nodes, virt_inner, outer_normal);  
+		if (!virt_node.number)
+		{
+		    LOG_INFO("09");
+                    LOG_INFO("cur \n"<<cur_node.getRheologyMatrix()->getU());
+                    LOG_INFO("virt \n"<<virt_node.getRheologyMatrix()->getU());
+                    LOG_INFO("o_n "<<outer_normal[0]<<" "<<outer_normal[1]<<" "<<outer_normal[2]<<" ");
+		}
 	 	//LOG_INFO("10");
 		return;
 	    }
@@ -511,186 +546,9 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
 	    return;
 	}
 
-	LOG_INFO("OBVIOUSLY, we forgot something 3 " <<outer_count);
+	//LOG_INFO("OBVIOUSLY, we forgot something 3 " <<outer_count);
 
 	return;
-        if (outer_count == 3)
-        {
-            // Border
-            if (!cur_node.isInContact() || cur_node.contactDirection != stage) {
-                // FIXME
-                int borderCondId = cur_node.getBorderConditionId();
-                //if(engine.getBorderCondition(borderCondId)->calc->getType() != "FreeBorderCalculator")
-                //    LOG_INFO("Node: " << cur_node.number << ". Using calculator: " << engine.getBorderCondition(borderCondId)->calc->getType());
-                engine.getBorderCondition(borderCondId)->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
-                                                                 new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal);
-            }
-            // Contact
-            else
-            {
-                CalcNode& virt_node = engine.getVirtNode(cur_node.contactNodeNum);
-
-                // FIXME - WA
-                Mesh* virtMesh = (Mesh*) engine.getBody(virt_node.contactNodeNum)->getMeshes();
-                // Mark virt node as having contact state
-                // TODO FIXME - most probably CollisionDetector should do it
-                // But we should check it anycase
-                virt_node.setInContact(true);
-                //virt_node.contactNodeNum = cur_node.contactNodeNum;
-
-                // Variables used in calculations internally
-
-                // Delta x on previous time layer for all the omegas
-                //     omega_new_time_layer(ksi) = omega_old_time_layer(ksi+dksi)
-                float virt_dksi[9];
-
-                // If the corresponding point on previous time layer is inner or not
-                bool virt_inner[9];
-
-                // We will store interpolated nodes on previous time layer here
-                // We know that we need five nodes for each direction (corresponding to Lambdas -C1, -C2, 0, C2, C1)
-                // TODO  - We can  deal with (lambda == 0) separately
-                vector<CalcNode> virt_previous_nodes;
-                virt_previous_nodes.resize(9);
-
-                // Outer normal at current point
-                float virt_outer_normal[3];
-
-                // Number of outer characteristics
-                int virt_outer_count = prepare_node(virt_node, virt_node.getRheologyMatrix(),
-                                                    time_step, stage, virtMesh,
-                                                    virt_dksi, virt_inner, virt_previous_nodes,
-                                                    virt_outer_normal);
-
-                // FIXME_ASAP: WA
-                switch (stage) {
-                case 0: virt_node.getRheologyMatrix()->decomposeX(virt_node);
-                    break;
-                case 1: virt_node.getRheologyMatrix()->decomposeY(virt_node);
-                    break;
-                case 2: virt_node.getRheologyMatrix()->decomposeZ(virt_node);
-                    break;
-                }
-                
-                // WA for sharp edges
-                if(virt_outer_count == 0) {
-                    RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
-                    RheologyMatrixPtr virtM = virt_node.getRheologyMatrix();
-                    int sign = 0;
-                    for(int i = 0; i < 9; i++) {
-                        if(!inner[i])
-                            sign = (curM->getL(i,i) > 0 ? 1 : -1);
-                    }
-                    for(int i = 0; i < 9; i++) {
-                        if( virtM->getL(i,i) * sign < 0 )
-                            virt_inner[i] = false;
-                    }
-                    virt_outer_count = 3;
-                }
-
-                // TODO - merge this condition with the next ones
-                if (virt_outer_count != 3) {
-                    LOG_DEBUG("EXTENDED DEBUG INFO BEGINS");
-                    prepare_node(virt_node, virt_node.getRheologyMatrix(), time_step, stage, virtMesh, 
-                                 virt_dksi, virt_inner, virt_previous_nodes, virt_outer_normal, true);
-                    LOG_DEBUG("EXTENDED DEBUG INFO ENDS");
-                    LOG_DEBUG("Calc contact failed. Mesh: " << mesh->getId()
-                          << " Virt mesh: " << virtMesh->getId()
-                          << "\nReal node: " << cur_node << "\nVirt node: " << virt_node);
-                    LOG_DEBUG("There are " << virt_outer_count << " 'outer' characteristics for virt node.");
-                    for (int z = 0; z < 9; z++) {
-                        LOG_DEBUG("Dksi[" << z << "]: " << virt_dksi[z]);
-                        LOG_DEBUG("Inner[" << z << "]: " << virt_inner[z]);
-                        LOG_DEBUG("PrNodes[" << z << "]: " << virt_previous_nodes[z]);
-                    }
-                    THROW_BAD_METHOD("Illegal number of outer characteristics");
-                }
-
-                //                // Check that 'paired node' is in the direction of 'outer' characteristics
-                //                // If it is not the case - we have strange situation when
-                //                // we replace 'outer' points data with data of 'paired node' from different axis direction.
-                //
-                //                // For all characteristics of real node and virt node
-                //                /*for(int i = 0; i < 9; i++)
-                //                {
-                //                    float v_x_outer[3];
-                //                    float v_x_virt[3];
-                //                    // Real node - if characteristic is 'outer'*/
-                //    /*                if(!inner[i])
-                //                    {
-                //                        // Find directions to corresponding 'outer' point and to virt 'paired node'
-                //                        for(int j = 0; j < 3; j++) {
-                //                            v_x_outer[j] = previous_nodes[ppoint_num[i]].coords[j] - cur_node.coords[j];
-                //                            v_x_virt[j] = virt_node.coords[j] - cur_node.coords[j];
-                //                        }
-                //                        // If directions are different - smth bad happens
-                //                        if( (v_x_outer[0] * v_x_virt[0]
-                //                             + v_x_outer[1] * v_x_virt[1] + v_x_outer[2] * v_x_virt[2]) < 0 )
-                //                        {
-                //                            *logger << "MESH " << mesh->zone_num << "REAL NODE " << cur_node.local_num << ": "
-                //                                    << "x: " << cur_node.coords[0]
-                //                                    << " y: " << cur_node.coords[1]
-                //                                    << " z: " < cur_node.coords[2];
-                //                            log_node_diagnostics(cur_node, stage, outer_normal, mesh, basis_num, rheologyMatrix, time_step, previous_nodes, ppoint_num, inner, dksi);
-                //                            *logger << "'Outer' direction: " << v_x_outer[0] << " "
-                //                                << v_x_outer[1] << " " < v_x_outer[2];
-                //                            *logger << "'Virt' direction: " << v_x_virt[0] << " "
-                //                                << v_x_virt[1] << " " < v_x_virt[2];
-                //                            throw GCMException( GCMException::METHOD_EXCEPTION, "Bad contact from real node point of view: 'outer' and 'virt' directions are different");
-                //                        }
-                //                    }*/
-                //    // We switch it off because it conflicts sometimes with 'safe_direction'
-                //    /*                // Virt node - if characteristic is 'outer'
-                //                    if(!virt_inner[i])
-                //                    {
-                //                        // Find directions to corresponding 'outer' point and to real 'paired node'
-                //                        for(int j = 0; j < 3; j++) {
-                //                            v_x_outer[j] = virt_previous_nodes[virt_ppoint_num[i]].coords[j] - virt_node.coords[j];
-                //                            v_x_virt[j] = cur_node.coords[j] - virt_node.coords[j];
-                //                        }
-                //                        // If directions are different - smth bad happens
-                //                        if( (v_x_outer[0] * v_x_virt[0]
-                //                            + v_x_outer[1] * v_x_virt[1] + v_x_outer[2] * v_x_virt[2]) < 0 )
-                //                        {
-                //                            *logger << "MESH " << mesh->zone_num << "REAL NODE " << cur_node.local_num << ": "
-                //                                    << "x: " << cur_node.coords[0]
-                //                                    << " y: " << cur_node.coords[1]
-                //                                    << " z: " < cur_node.coords[2];
-                //                            log_node_diagnostics(virt_node, stage, virt_outer_normal, virt_node.mesh, basis_num, virt_rheologyMatrix, time_step, virt_previous_nodes, virt_ppoint_num, virt_inner, virt_dksi);
-                //                            *logger << "'Outer' direction: " << v_x_outer[0] << " "
-                //                                << v_x_outer[1] << " "< v_x_outer[2];
-                //                            *logger << "'Virt' direction: " << v_x_virt[0] << " "
-                //                                << v_x_virt[1] << " " < v_x_virt[2];
-                //                            throw GCMException( GCMException::METHOD_EXCEPTION, "Bad contact from virt node point of view: 'outer' and 'virt' directions are different");
-                //                        }
-                //                    }*/
-                ////                }
-                //
-                LOG_TRACE("Using calculator: " << engine.getContactCondition(cur_node.getContactConditionId())->calc->getType());
-                LOG_TRACE("Outer normal: " << outer_normal[0] << " " << outer_normal[1] << " " << outer_normal[2]);
-                engine.getContactCondition(cur_node.getContactConditionId())->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
-                                                       new_node, virt_node, cur_node.getRheologyMatrix(), previous_nodes, inner,
-                                                       virt_node.getRheologyMatrix(), virt_previous_nodes, virt_inner, outer_normal);
-            }
-            // It means smth went wrong. Just interpolate the values and report bad node.
-        }
-        else
-        {
-            //LOG_WARN("Outer count: " << outer_count);
-            //LOG_WARN("Node: " << cur_node);
-            //for (int z = 0; z < 9; z++) {
-            //    LOG_WARN("Dksi[" << z << "]: " << dksi[z]);
-            //    LOG_WARN("Inner[" << z << "]: " << inner[z]);
-            //    LOG_WARN("PrNodes[" << z << "]: " << previous_nodes[z]);
-            //}
-            //THROW_BAD_METHOD("Illegal number of outer characteristics");
-            // FIXME - implement border and contact completely
-            LOG_TRACE("Using calculator: " << engine.getBorderCondition(0)->calc->getType());
-            engine.getBorderCondition(0)->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
-                                                  new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal);
-            //cur_node.setNeighError(stage);
-        }
-        LOG_TRACE("Done border node calc");
     }
 }
 
@@ -814,38 +672,55 @@ int InterpolationFixedAxis::find_nodes_on_previous_time_layer(CalcNode& cur_node
                 inner[i] = true;
                 LOG_TRACE("Checking inner node done");
             }
-            else if (cur_node.isBorder()) {
+            else //if (cur_node.isBorder()) 
+	    {
                 LOG_TRACE("Checking border node");
                 // ... Find owner tetrahedron ...
                 bool isInnerPoint;
                 bool interpolated = mesh->interpolateNode(cur_node, dx[0], dx[1], dx[2], debug,
                                                           previous_nodes[i], isInnerPoint);
-
+		
                 // If we found inner point, it means
                 // this direction is inner and everything works as for usual inner point
                 if (isInnerPoint) {
                     inner[i] = true;
                     // If we did not find inner point - two cases are possible
                 }
-                else {
-                    inner[i] = false;
+                else 
+		{
+		    Engine& e = Engine::getInstance();
+		    inner[i] = false;
+		    Mesh* m = NULL;
+		    for (int j=0; j<e.getNumberOfBodies(); j++)	
+		    {
+			if (inner[i]) continue;
+			m = e.getBody(j)->getMeshes();
+			if (!m) continue;
+ 			bool found = m->interpolateBorderNode(cur_node.coords[0], cur_node.coords[1], cur_node.coords[2], dx[0], dx[1], dx[2], previous_nodes[i]);
+			if (found) 
+			{
+			    inner[i] = true;
+			    //LOG_INFO("FOUND A NODE");
+			}
+	   	    }
+                    //inner[i] = false;
                     // We found border cross somehow
                     // It can happen if we work with really thin structures and big time step
                     // We can work as usual in this case
-                    if (interpolated) {
-                        LOG_TRACE("Border node: we need new method here!");
-                        inner[i] = true;
+                    //if (interpolated) {
+                    //    LOG_TRACE("Border node: we need new method here!");
+                    //    inner[i] = true;
                         // Or we did not find any point at all - it means this characteristic is outer
-                    }
-                    else {
-                        inner[i] = false;
-                    }
+                    //}
+                    //else {
+                    //    inner[i] = false;
+                    //}
                 }
                 LOG_TRACE("Checking border node done");
             }
-            else {
-                THROW_BAD_MESH("Unsupported case for characteristic location");
-            }
+            //else {
+            //    THROW_BAD_MESH("Unsupported case for characteristic location");
+            //}
         }
         LOG_TRACE("Looking for characteristic " << i << " done");
     }

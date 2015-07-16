@@ -146,6 +146,11 @@ void AdhesionContactCalculator::doCalc(CalcNode& cur_node, CalcNode& new_node, C
     // Tmp value for GSL solver
     int s;
     gsl_linalg_LU_decomp (U_gsl, p_gsl, &s);
+    if (fabs(gsl_linalg_LU_det(U_gsl,s)) < EQUALITY_TOLERANCE)
+    {
+	virt_node.number = 0;
+	return;
+    }
     gsl_linalg_LU_solve (U_gsl, p_gsl, om_gsl, x_gsl);
 
     // Just get first 9 values (real node) and dump the rest 9 (virt node)
