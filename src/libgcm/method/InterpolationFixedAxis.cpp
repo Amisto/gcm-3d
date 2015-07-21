@@ -260,6 +260,86 @@ void InterpolationFixedAxis::__doNextPartStep(CalcNode& cur_node, CalcNode& new_
             return;
         }
 	if (outer_count != 3) LOG_INFO("outers: "<<outer_count);
+
+	    if (!cur_node.isInContact() || cur_node.contactDirection != stage) {
+                // FIXME
+                int borderCondId = cur_node.getBorderConditionId();
+                LOG_TRACE("Using calculator: " << engine.getBorderCondition(borderCondId)->calc->getType());
+                engine.getBorderCondition(borderCondId)->doCalc(Engine::getInstance().getCurrentTime(), cur_node,
+                                                                 new_node, cur_node.getRheologyMatrix(), previous_nodes, inner, outer_normal);
+            }
+            // Contact
+            else
+            {
+                CalcNode& virt_node = engine.getVirtNode(cur_node.contactNodeNum);
+
+                // FIXME - WA
+                Mesh* virtMesh = (Mesh*) engine.getBody(virt_node.contactNodeNum)->getMeshes();
+
+                LOG_TRACE("We are going to calc contact. Target virt node: "
+                          << cur_node.contactNodeNum << " Target mesh: " << virt_node.contactNodeNum);
+
+                LOG_TRACE("Mesh: " << mesh->getId()
+                          << " Virt mesh: " << virtMesh->getId()
+                          << "\nReal node: " << cur_node << "\nVirt node: " << virt_node);
+
+                // Mark virt node as having contact state
+                // TODO FIXME - most probably CollisionDetector should do it
+                // But we should check it anycase
+                virt_node.setInContact(true);
+                //virt_node.contactNodeNum = cur_node.contactNodeNum;
+
+                // Variables used in calculations internally
+
+                // Delta x on previous time layer for all the omegas
+                //     omega_new_time_layer(ksi) = omega_old_time_layer(ksi+dksi)
+                float virt_dksi[9];
+
+                // If the corresponding point on previous time layer is inner or not
+                bool virt_inner[9];
+
+                // We will store interpolated nodes on previous time layer here
+                // We know that we need five nodes for each direction (corresponding to Lambdas -C1, -C2, 0, C2, C1)
+                // TODO  - We can  deal with (lambda == 0) separately
+                vector<CalcNode> virt_previous_nodes;
+                virt_previous_nodes.resize(9);
+
+                // Outer normal at current point
+                float virt_outer_normal[3];
+
+                // Number of outer characteristics
+                int virt_outer_count = prepare_node(virt_node, virt_node.getRheologyMatrix(),
+                                                    time_step, stage, virtMesh,
+                                                    virt_dksi, virt_inner, virt_previous_nodes,
+                                                    virt_outer_normal);
+
+                // FIXME_ASAP: WA
+                switch (stage) {
+                case 0: virt_node.getRheologyMatrix()->decomposeX(virt_node);
+                    break;
+                case 1: virt_node.getRheologyMatrix()->decomposeY(virt_node);
+                    break;
+                case 2: virt_node.getRheologyMatrix()->decomposeZ(virt_node);
+                    break;
+                }
+                
+                // WA for sharp edges
+                if(virt_outer_count == 0) {
+                    RheologyMatrixPtr curM = cur_node.getRheologyMatrix();
+                    RheologyMatrixPtr virtM = virt_node.getRheologyMatrix();
+                    int sign = 0;
+                    for(int i = 0; i < 9; i++) {
+                        if(!inner[i])
+                            sign = (curM->getL(i,i) > 0 ? 1 : -1);
+                    }
+                    for(int i = 0; i < 9; i++) {
+                        if( virtM->getL(i,i) * sign < 0 )
+                            virt_inner[i] = false;
+                    }
+                    virt_outer_count = 3;
+                }
+	    }
+	return;
 	//LOG_INFO("02");
 /*	if (outer_count == 2 || outer_count == 4 || outer_count == 6) //double contact, we have another bodies on both sides
 	{

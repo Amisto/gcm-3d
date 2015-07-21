@@ -99,7 +99,8 @@ void FreeBorderCalculator::doCalc(CalcNode& cur_node, CalcNode& new_node, Rheolo
     gsl_linalg_LU_solve (U_gsl, p_gsl, om_gsl, x_gsl);
 
     for(int j = 0; j < 9; j++)
-        new_node.values[j] = new_node.values[j] + (gsl_vector_get(x_gsl, j) - cur_node.values[j] );
+        new_node.values[j] = gsl_vector_get(x_gsl, j);//new_node.values[j] + (gsl_vector_get(x_gsl, j) - cur_node.values[j] );
+    return;
 //WARNING Toxic hack ahead ----------------------------------------------------------------------------
     int nmax = 0, nmin = 0;
     gcm::real max = matrix->getL(0, 0), min = matrix->getL(0, 0);

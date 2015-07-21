@@ -39,9 +39,9 @@ void SimpleVolumeCalculator::doCalc(CalcNode& cur_node, CalcNode& new_node, Rheo
         {
             new_val += matrix->getU1(i,j) * omega[j];
         }
-        new_node.values[i] = new_node.values[i] + (new_val - cur_node.values[i]);
+        new_node.values[i] = new_val;//node.values[i] + (new_val - cur_node.values[i]);
     }
-
+    return;
 //WARNING Toxic hack ahead ----------------------------------------------------------------------------
     int nmax = 0, nmin = 0;
     gcm::real max = matrix->getL(0, 0), min = matrix->getL(0, 0);
